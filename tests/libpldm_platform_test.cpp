@@ -4858,22 +4858,23 @@ TEST(decodeNumericEffecterPdrData, Real32Test)
 
 TEST(GetStateEffecterStates, testGoodEncodeRequest)
 {
-    std::vector<uint8_t> requestMsg(hdrSize +
-                                    PLDM_GET_STATE_EFFECTER_STATES_REQ_BYTES);
+    std::array<uint8_t, hdrSize + 
+                            PLDM_GET_STATE_EFFECTER_STATES_REQ_BYTES>
+        requestMsg{};
 
-    uint16_t effecter_id = 0xab01;
+    constexpr std::array<uint8_t, hdrSize + 
+                            PLDM_GET_STATE_EFFECTER_STATES_REQ_BYTES>
+        expectedRequstMsg{0, 0x80, 2, 0x3a, 1, 0xab};
+
+    constexpr uint16_t effecter_id = 0xab01;
 
     auto request = reinterpret_cast<pldm_msg*>(requestMsg.data());
 
     auto rc = encode_get_state_effecter_states_req(
         0, effecter_id, request, PLDM_GET_STATE_EFFECTER_STATES_REQ_BYTES);
 
-    struct pldm_get_state_effecter_states_req* req =
-        reinterpret_cast<struct pldm_get_state_effecter_states_req*>(
-            request->payload);
-
     EXPECT_EQ(rc, PLDM_SUCCESS);
-    EXPECT_EQ(effecter_id, le16toh(req->effecter_id));
+    EXPECT_EQ(requestMsg, expectedRequstMsg);
 }
 
 TEST(GetStateEffecterStates, testBadEncodeRequest)
@@ -4969,4 +4970,49 @@ TEST(GetStateEffecterStates, testBadDecodeResponse)
         &retcomp_effecterCnt, retstateField.data());
 
     EXPECT_EQ(rc, PLDM_ERROR_INVALID_LENGTH);
+}
+
+TEST(GetStateEffecterStates, testGoodEncodeResponse)
+{
+    std::array<uint8_t, hdrSize +
+                            PLDM_GET_STATE_SENSOR_READINGS_MIN_RESP_BYTES +
+                            sizeof(get_sensor_state_field) * 2>
+        responseMsg{};
+
+    auto response = reinterpret_cast<pldm_msg*>(responseMsg.data());
+    uint8_t completionCode = 0;
+    uint8_t comp_sensorCnt = 0x2;
+
+    std::array<get_sensor_state_field, 2> stateField{};
+    stateField[0] = {PLDM_SENSOR_ENABLED, PLDM_SENSOR_NORMAL,
+                     PLDM_SENSOR_WARNING, PLDM_SENSOR_UNKNOWN};
+    stateField[1] = {PLDM_SENSOR_FAILED, PLDM_SENSOR_UPPERFATAL,
+                     PLDM_SENSOR_UPPERCRITICAL, PLDM_SENSOR_FATAL};
+
+    auto rc = encode_get_state_sensor_readings_resp(
+        0, PLDM_SUCCESS, comp_sensorCnt, stateField.data(), response);
+
+    struct pldm_get_state_sensor_readings_resp* resp =
+        reinterpret_cast<struct pldm_get_state_sensor_readings_resp*>(
+            response->payload);
+
+    EXPECT_EQ(rc, PLDM_SUCCESS);
+    EXPECT_EQ(completionCode, resp->completion_code);
+    EXPECT_EQ(comp_sensorCnt, resp->comp_sensor_count);
+    EXPECT_EQ(stateField[0].sensor_op_state, resp->field->sensor_op_state);
+    EXPECT_EQ(stateField[0].present_state, resp->field->present_state);
+    EXPECT_EQ(stateField[0].previous_state, resp->field->previous_state);
+    EXPECT_EQ(stateField[0].event_state, resp->field->event_state);
+    EXPECT_EQ(stateField[1].sensor_op_state, resp->field[1].sensor_op_state);
+    EXPECT_EQ(stateField[1].present_state, resp->field[1].present_state);
+    EXPECT_EQ(stateField[1].previous_state, resp->field[1].previous_state);
+    EXPECT_EQ(stateField[1].event_state, resp->field[1].event_state);
+}
+
+TEST(GetStateEffecterStates, testBadEncodeResponse)
+{
+    auto rc = encode_get_state_sensor_readings_resp(0, PLDM_SUCCESS, 0, nullptr,
+                                                    nullptr);
+
+    EXPECT_EQ(rc, PLDM_ERROR_INVALID_DATA);
 }
